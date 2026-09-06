@@ -1,4 +1,7 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 
+  (typeof window !== 'undefined' && window.location.protocol === 'https:'
+    ? 'https://arrow-puzzle.onrender.com/api'
+    : 'http://localhost:5000/api');
 
 function mulberry32(a) {
   return function() {
@@ -917,7 +920,13 @@ export async function fetchLevel(levelNumber) {
   }
 
   try {
-    const res = await fetch(`${API_BASE}/levels/${num}`, { cache: 'no-store' });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3000);
+    const res = await fetch(`${API_BASE}/levels/${num}`, { 
+      cache: 'no-store',
+      signal: controller.signal
+    });
+    clearTimeout(timer);
     if (res.ok) {
       const json = await res.json();
       if (json.success && json.data && json.data.level_number === num && json.data.arrows && json.data.arrows.length > 0) {
@@ -966,11 +975,15 @@ export async function submitLevelWin(levelNumber, heartsLeft = 3, timeSeconds = 
   saveLocalProfile(currentProfile);
 
   try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3000);
     const res = await fetch(`${API_BASE}/levels/${num}/complete`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ heartsLeft, timeSeconds })
+      body: JSON.stringify({ heartsLeft, timeSeconds }),
+      signal: controller.signal
     });
+    clearTimeout(timer);
     if (res.ok) {
       const json = await res.json();
       if (json.success && json.data?.profile) {

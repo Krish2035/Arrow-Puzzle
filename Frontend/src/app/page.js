@@ -99,16 +99,30 @@ export default function Page() {
   };
 
   // Handle completing a level
-  const handleLevelComplete = async (clearedLevelNumber, heartsLeft, timeSeconds) => {
-    // Record completion in backend
-    const res = await submitLevelWin(clearedLevelNumber, heartsLeft, timeSeconds);
-    if (res && res.data && res.data.profile) {
-      setUserProfile(res.data.profile);
-      setCurrentLevel(res.data.next_level || clearedLevelNumber + 1);
-    } else {
-      setCurrentLevel(clearedLevelNumber + 1);
+  const handleLevelComplete = (clearedLevelNumber, heartsLeft, timeSeconds) => {
+    const num = parseInt(clearedLevelNumber, 10) || currentLevel;
+    const nextLvl = Math.min(100, num + 1);
+
+    if (levelData) {
+      setLastClearedLevelData(levelData);
     }
+    // Immediate instant transition to victory screen
+    setCurrentLevel(nextLvl);
     setScreen('win');
+
+    // Asynchronously record in backend/localStorage in background
+    submitLevelWin(num, heartsLeft, timeSeconds)
+      .then(res => {
+        if (res && res.data && res.data.profile) {
+          setUserProfile(res.data.profile);
+          if (res.data.next_level) {
+            setCurrentLevel(res.data.next_level);
+          }
+        }
+      })
+      .catch(err => {
+        console.warn('Background sync:', err);
+      });
   };
 
   // Handle Next Game action from win screen
@@ -165,7 +179,7 @@ export default function Page() {
 
         {screen === 'win' && (
           <LevelWinScreen
-            completedLevel={levelData?.level_number || 3}
+            completedLevel={lastClearedLevelData?.level_number || levelData?.level_number || 1}
             onNextGame={handleNextGame}
             onGoHome={handleGoHome}
             levelPreviewData={lastClearedLevelData}

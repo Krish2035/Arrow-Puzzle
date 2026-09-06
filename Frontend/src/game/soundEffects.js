@@ -151,6 +151,34 @@ class SoundEngine {
       // Audio context policy fallback
     }
   }
+
+  playFirecracker() {
+    if (this.muted) return;
+    try {
+      this.initContext();
+      if (!this.ctx) return;
+      const now = this.ctx.currentTime;
+      // Staggered pop and sparkle bursts
+      [0, 0.12, 0.28, 0.45].forEach((offset, idx) => {
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = idx % 2 === 0 ? 'sine' : 'triangle';
+        osc.frequency.setValueAtTime(800 + idx * 150, now + offset);
+        osc.frequency.exponentialRampToValueAtTime(120, now + offset + 0.09);
+
+        gain.gain.setValueAtTime(0.22, now + offset);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.1);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+
+        osc.start(now + offset);
+        osc.stop(now + offset + 0.11);
+      });
+    } catch (e) {
+      // Audio context fallback
+    }
+  }
 }
 
 export const sounds = new SoundEngine();

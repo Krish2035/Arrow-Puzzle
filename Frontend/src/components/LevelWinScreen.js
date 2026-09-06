@@ -12,26 +12,57 @@ export default function LevelWinScreen({
   levelPreviewData
 }) {
   useEffect(() => {
-    // Play win sound fanfare
+    // Play win sound fanfare & cracker pops
     sounds.playWin();
+    sounds.playFirecracker();
 
-    // Trigger confetti cannon burst
-    const launchConfetti = () => {
+    // Multi-cannon cracker fireworks explosions
+    // 1. Immediate center blast
+    confetti({
+      particleCount: 90,
+      spread: 90,
+      origin: { y: 0.32, x: 0.5 },
+      colors: ['#ff4081', '#00e5ff', '#ffeb3b', '#76ff03', '#ff9100', '#ffffff']
+    });
+
+    // 2. Left side cannon blast
+    const timer1 = setTimeout(() => {
+      sounds.playFirecracker();
       confetti({
-        particleCount: 65,
-        spread: 100,
-        origin: { y: 0.25 },
-        colors: ['#ff4081', '#00e5ff', '#ffeb3b', '#76ff03', '#ff9100', '#ffffff']
+        particleCount: 70,
+        angle: 60,
+        spread: 60,
+        origin: { x: 0.08, y: 0.65 },
+        colors: ['#00e5ff', '#ffeb3b', '#e040fb', '#ffffff']
       });
-    };
+    }, 280);
 
-    launchConfetti();
-    const timer1 = setTimeout(launchConfetti, 450);
-    const timer2 = setTimeout(launchConfetti, 1000);
+    // 3. Right side cannon blast
+    const timer2 = setTimeout(() => {
+      sounds.playFirecracker();
+      confetti({
+        particleCount: 70,
+        angle: 120,
+        spread: 60,
+        origin: { x: 0.92, y: 0.65 },
+        colors: ['#ff4081', '#76ff03', '#ff9100', '#ffffff']
+      });
+    }, 550);
+
+    // 4. Grand finale celebration shower
+    const timer3 = setTimeout(() => {
+      confetti({
+        particleCount: 110,
+        spread: 120,
+        origin: { y: 0.3 },
+        colors: ['#ffeb3b', '#ff4081', '#00e5ff', '#76ff03', '#ff9100', '#ffffff']
+      });
+    }, 900);
 
     return () => {
       clearTimeout(timer1);
       clearTimeout(timer2);
+      clearTimeout(timer3);
     };
   }, []);
 
@@ -77,12 +108,14 @@ export default function LevelWinScreen({
   };
 
   const renderArrowhead = (arrow) => {
+    if (!arrow || !arrow.points || arrow.points.length === 0) return null;
     const endPoint = arrow.points[arrow.points.length - 1];
     const [hx, hy] = toSvgCoords(endPoint[0], endPoint[1]);
     const len = 7.5;
     const halfWidth = len * 0.58;
     let d = '';
-    switch (arrow.direction.toLowerCase()) {
+    const dir = (arrow?.direction || 'right').toLowerCase();
+    switch (dir) {
       case 'up':
         d = `M ${hx.toFixed(1)} ${hy.toFixed(1)} L ${(hx - halfWidth).toFixed(1)} ${(hy + len).toFixed(1)} L ${(hx + halfWidth).toFixed(1)} ${(hy + len).toFixed(1)} Z`;
         break;
