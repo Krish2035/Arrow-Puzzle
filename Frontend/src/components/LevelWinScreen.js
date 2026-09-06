@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import confetti from 'canvas-confetti';
 import { sounds } from '../game/soundEffects';
 import { Star, Trophy, ArrowRight, Home } from 'lucide-react';
@@ -91,9 +91,50 @@ export default function LevelWinScreen({
   const usableSize = svgSize - padding * 2;
   const scale = usableSize / gridSize;
 
+  // Compute active bounds and used columns/rows for level preview
+  const { minX, maxX, minY, maxY, usedCols, usedRows } = useMemo(() => {
+    let minX = Infinity, maxX = -Infinity;
+    let minY = Infinity, maxY = -Infinity;
+    const usedCols = new Set();
+    const usedRows = new Set();
+
+    const allArrows = levelPreviewData?.arrows || [];
+    allArrows.forEach(arrow => {
+      (arrow.points || []).forEach(([x, y]) => {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      });
+      for (let i = 0; i < (arrow.points || []).length - 1; i++) {
+        const [x1, y1] = arrow.points[i];
+        const [x2, y2] = arrow.points[i + 1];
+        for (let x = Math.floor(Math.min(x1, x2)); x <= Math.ceil(Math.max(x1, x2)); x++) {
+          usedCols.add(x);
+        }
+        for (let y = Math.floor(Math.min(y1, y2)); y <= Math.ceil(Math.max(y1, y2)); y++) {
+          usedRows.add(y);
+        }
+      }
+    });
+
+    if (minX === Infinity) {
+      minX = 1; maxX = gridSize - 1;
+      minY = 1; maxY = gridSize - 1;
+    }
+
+    return { minX, maxX, minY, maxY, usedCols, usedRows };
+  }, [levelPreviewData, gridSize]);
+
+  // Center active maze bounds within SVG preview viewbox
+  const activeCenterX = (minX + maxX) / 2;
+  const activeCenterY = (minY + maxY) / 2;
+  const offsetX = (gridSize / 2 - activeCenterX) * scale;
+  const offsetY = (gridSize / 2 - activeCenterY) * scale;
+
   const toSvgCoords = (gx, gy) => [
-    padding + gx * scale,
-    padding + gy * scale
+    padding + offsetX + gx * scale,
+    padding + offsetY + gy * scale
   ];
 
   const createPathD = (points) => {
@@ -137,8 +178,15 @@ export default function LevelWinScreen({
   const renderGridDots = () => {
     const dots = [];
     const dotRadius = Math.max(1.2, Math.min(2.0, (20 / gridSize)));
-    for (let x = 1; x <= gridSize - 1; x++) {
-      for (let y = 1; y <= gridSize - 1; y++) {
+    const startX = Math.max(1, Math.floor(minX));
+    const endX = Math.min(gridSize - 1, Math.ceil(maxX));
+    const startY = Math.max(1, Math.floor(minY));
+    const endY = Math.min(gridSize - 1, Math.ceil(maxY));
+
+    for (let x = startX; x <= endX; x++) {
+      if (usedCols.size > 0 && !usedCols.has(x)) continue;
+      for (let y = startY; y <= endY; y++) {
+        if (!usedRows.size > 0 && !usedRows.has(y)) continue;
         const [cx, cy] = toSvgCoords(x, y);
         dots.push(
           <circle
