@@ -175,8 +175,8 @@ const curatedLevels = {
       { id: 'a2', points: [[2.0, 3.0], [4.5, 3.0]], direction: 'right' }, // The ONLY unblocked opening! Hand points here!
       { id: 'a1', points: [[3.0, 1.5], [3.0, 2.5]], direction: 'down' },  // Blocked by a2
       { id: 'a3', points: [[4.8, 2.0], [3.5, 2.0]], direction: 'left' },  // Blocked by a1
-      { id: 'a4', points: [[4.0, 3.5], [4.0, 2.3]], direction: 'up' },    // Blocked by a3
-      { id: 'a5', points: [[4.0, 5.0], [4.0, 3.8]], direction: 'up' }     // Blocked by a4
+      { id: 'a4', points: [[4.0, 2.8], [4.0, 2.3]], direction: 'up' },    // Blocked by a3
+      { id: 'a5', points: [[4.0, 5.0], [4.0, 3.5]], direction: 'up' }     // Blocked by a2
     ]
   },
   // Level 2: 8 arrows, interlocking U-turns & box traps (only 2 free openings)
@@ -189,7 +189,7 @@ const curatedLevels = {
       { id: 'a1', points: [[3.0, 4.2], [3.0, 2.2], [4.0, 2.2], [4.0, 4.0]], direction: 'down' },
       { id: 'a2', points: [[2.0, 4.8], [2.0, 1.5]], direction: 'up' },
       { id: 'a3', points: [[2.8, 4.8], [5.2, 4.8]], direction: 'right' },
-      { id: 'a4', points: [[4.8, 1.8], [1.5, 1.8]], direction: 'left' },
+      { id: 'a4', points: [[4.8, 1.8], [2.4, 1.8]], direction: 'left' }, // Cleanly stops at 2.4 before a2 at 2.0
       { id: 'a5', points: [[1.5, 1.0], [5.2, 1.0]], direction: 'right' },
       { id: 'a6', points: [[1.2, 2.5], [1.2, 5.5], [4.8, 5.5]], direction: 'right' },
       { id: 'a7', points: [[5.5, 1.0], [5.5, 6.0]], direction: 'down' },
@@ -294,6 +294,34 @@ export function analyzeSolvability(arrows) {
     chainDepth: steps,
     totalArrows: arrows.length
   };
+}
+
+export function doSegmentsIntersect(p1, p2, p3, p4) {
+  function ccw(A, B, C) {
+    return (C[1] - A[1]) * (B[0] - A[0]) > (B[1] - A[1]) * (C[0] - A[0]);
+  }
+  if ((p1[0] === p3[0] && p1[1] === p3[1]) || (p1[0] === p4[0] && p1[1] === p4[1]) ||
+      (p2[0] === p3[0] && p2[1] === p3[1]) || (p2[0] === p4[0] && p2[1] === p4[1])) {
+    return false;
+  }
+  return (ccw(p1, p3, p4) !== ccw(p2, p3, p4)) && (ccw(p1, p2, p3) !== ccw(p1, p2, p4));
+}
+
+export function hasSegmentIntersections(arrows) {
+  for (let i = 0; i < arrows.length; i++) {
+    for (let j = i + 1; j < arrows.length; j++) {
+      const a1 = arrows[i];
+      const a2 = arrows[j];
+      for (let s1 = 0; s1 < a1.points.length - 1; s1++) {
+        for (let s2 = 0; s2 < a2.points.length - 1; s2++) {
+          if (doSegmentsIntersect(a1.points[s1], a1.points[s1 + 1], a2.points[s2], a2.points[s2 + 1])) {
+            return true;
+          }
+        }
+      }
+    }
+  }
+  return false;
 }
 
 function generateDensePuzzleCandidate(targetArrows, gridSize, rng) {
@@ -439,6 +467,7 @@ export function generateProceduralLevel(levelNumber) {
     const rng = mulberry32(num * 99991 + attempt * 1337 + 17);
     const arrows = generateDensePuzzleCandidate(targetArrows, gridSize, rng);
     if (arrows.length < minArrows) continue;
+    if (hasSegmentIntersections(arrows)) continue;
 
     const analysis = analyzeSolvability(arrows);
     if (!analysis.solvable) continue;
@@ -476,18 +505,18 @@ export function generateProceduralLevel(levelNumber) {
     };
   }
 
-  // Guaranteed fallback
+  // Guaranteed non-intersecting fallback
   return {
     level_number: num,
     title: `Level ${num}`,
     difficulty,
     grid_size: 8,
     arrows: [
-      { id: 'a1', points: [[2, 2], [2, 5], [4, 5]], direction: 'right' },
-      { id: 'a2', points: [[3, 6], [3, 2]], direction: 'up' },
-      { id: 'a3', points: [[5, 2], [6, 2], [6, 5]], direction: 'down' },
-      { id: 'a4', points: [[6, 6], [4, 6]], direction: 'left' },
-      { id: 'a5', points: [[5, 4], [1, 4]], direction: 'left' }
+      { id: 'a1', points: [[2, 2], [5, 2]], direction: 'right' },
+      { id: 'a2', points: [[6, 2], [6, 5]], direction: 'down' },
+      { id: 'a3', points: [[6, 6], [3, 6]], direction: 'left' },
+      { id: 'a4', points: [[2, 6], [2, 3]], direction: 'up' },
+      { id: 'a5', points: [[4, 4], [4, 3]], direction: 'up' }
     ]
   };
 }
