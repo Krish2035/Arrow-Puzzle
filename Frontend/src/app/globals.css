@@ -1731,28 +1731,190 @@ html, body {
   cursor: pointer;
 }
 
+
+/* ===================================================
+   PWA & OFFLINE STYLES
+   =================================================== */
+
+/* Offline Status Banner */
+.offline-indicator-banner {
+  position: sticky;
+  top: 0;
+  width: 100%;
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  z-index: 1000;
+  box-shadow: 0 2px 8px rgba(217, 119, 6, 0.3);
+  animation: slideDown 0.3s ease-out;
+}
+
+.offline-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ffffff;
+  display: inline-block;
+  animation: pulseDot 1.5s infinite;
+}
+
+@keyframes pulseDot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.85); }
+}
+
+@keyframes slideDown {
+  from { transform: translateY(-100%); }
+  to { transform: translateY(0); }
+}
+
+/* PWA Install Toast Prompt */
+.pwa-install-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - 32px);
+  max-width: 440px;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  border-radius: 20px;
+  padding: 14px 18px;
+  box-shadow: 0 16px 36px rgba(18, 38, 63, 0.16);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  z-index: 999;
+  animation: toastUp 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes toastUp {
+  from { transform: translate(-50%, 60px); opacity: 0; }
+  to { transform: translate(-50%, 0); opacity: 1; }
+}
+
+.pwa-toast-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.pwa-toast-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  box-shadow: 0 4px 10px rgba(35, 111, 244, 0.25);
+  flex-shrink: 0;
+}
+
+.pwa-toast-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.pwa-toast-title {
+  font-size: 14px;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.2px;
+}
+
+.pwa-toast-sub {
+  font-size: 11px;
+  font-weight: 500;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pwa-toast-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.pwa-toast-dismiss {
+  background: transparent;
+  border: none;
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.pwa-toast-dismiss:hover {
+  color: #0f172a;
+}
+
+.pwa-toast-install {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  color: #ffffff;
+  border: none;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 8px 16px;
+  border-radius: 12px;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.pwa-toast-install:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.45);
+}
+
+.pwa-toast-install:active {
+  transform: scale(0.96);
+}
+
 /* ===================================================
    RESPONSIVE BREAKPOINTS (TABLET & MOBILE)
    =================================================== */
 
 /* TABLET (768px - 1023px) */
 @media (max-width: 1023px) {
+  .desktop-nav-content {
+    padding: 10px 18px;
+  }
+
   .home-dashboard-grid {
     grid-template-columns: 1fr;
+    gap: 20px;
   }
 
   .home-primary-cards {
-    flex-direction: row;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
   }
 
   .card-play-hero, .daily-challenge-card {
-    flex: 1;
+    height: 100%;
+    margin-bottom: 0;
   }
 
   .game-responsive-stage {
     grid-template-columns: 1fr;
-    gap: 20px;
+    gap: 16px;
     padding: 16px;
+    justify-items: center;
   }
 
   .game-desktop-panel.left-panel,
@@ -1760,20 +1922,38 @@ html, body {
     display: none;
   }
 
+  .puzzle-board-card {
+    max-width: min(540px, 85vw);
+    width: 100%;
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
   /* Show mobile top & stats row on tablet */
   .mobile-game-top-bar {
     display: flex;
-    max-width: 520px;
+    max-width: 540px;
     margin: 16px auto 0;
     width: 100%;
   }
 
   .unified-stats-pill-container {
     display: flex;
+    max-width: 540px;
+    margin: 14px auto 0;
+    width: 100%;
+    justify-content: center;
   }
 
   .mobile-game-bottom-tools {
     display: flex;
+    max-width: 540px;
+    margin: 16px auto;
+    width: 100%;
+    justify-content: center;
+    gap: 24px;
   }
 }
 
@@ -1817,6 +1997,7 @@ html, body {
   .home-primary-cards {
     flex-direction: column;
     align-items: center;
+    display: flex;
   }
 
   .card-play-hero {
@@ -1883,6 +2064,7 @@ html, body {
 
   .puzzle-board-card {
     max-width: min(390px, 90vw);
+    width: 100%;
     aspect-ratio: 1;
     border-radius: 0;
     padding: 0;
@@ -1911,5 +2093,10 @@ html, body {
 
   .nav-btn-label {
     display: none;
+  }
+
+  .pwa-install-toast {
+    bottom: 74px;
+    padding: 10px 14px;
   }
 }

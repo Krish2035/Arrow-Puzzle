@@ -878,29 +878,93 @@ export function getLevelFromCache(num) {
   return levelsCache[num];
 }
 
+const STORAGE_KEY_PROFILE = 'arrow_puzzle_profile';
+const STORAGE_KEY_LEVELS = 'arrow_puzzle_levels_cache';
+
+function getLocalProfile() {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_PROFILE);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  return null;
+}
+
+function saveLocalProfile(profile) {
+  if (typeof window === 'undefined' || !profile) return;
+  try {
+    localStorage.setItem(STORAGE_KEY_PROFILE, JSON.stringify(profile));
+  } catch (e) {}
+}
+
 export async function fetchLevel(levelNumber) {
   const num = parseInt(levelNumber, 10) || 1;
   if (curatedLevels[num]) {
     return curatedLevels[num];
   }
+
+  // Check localStorage level cache first for instant offline access
+  if (typeof window !== 'undefined') {
+    try {
+      const stored = localStorage.getItem(`${STORAGE_KEY_LEVELS}_${num}`);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed && parsed.level_number === num && parsed.arrows?.length > 0) {
+          return parsed;
+        }
+      }
+    } catch (e) {}
+  }
+
   try {
     const res = await fetch(`${API_BASE}/levels/${num}`, { cache: 'no-store' });
     if (res.ok) {
       const json = await res.json();
       if (json.success && json.data && json.data.level_number === num && json.data.arrows && json.data.arrows.length > 0) {
         if (verifySolvability(json.data.arrows)) {
+          if (typeof window !== 'undefined') {
+            try {
+              localStorage.setItem(`${STORAGE_KEY_LEVELS}_${num}`, JSON.stringify(json.data));
+            } catch (e) {}
+          }
           return json.data;
         }
       }
     }
   } catch (e) {
-    // Fallback
+    // Network failure / Offline mode
   }
-  return getLevelFromCache(num);
+
+  const offlineLevel = getLevelFromCache(num);
+  if (typeof window !== 'undefined' && offlineLevel) {
+    try {
+      localStorage.setItem(`${STORAGE_KEY_LEVELS}_${num}`, JSON.stringify(offlineLevel));
+    } catch (e) {}
+  }
+  return offlineLevel;
 }
 
 export async function submitLevelWin(levelNumber, heartsLeft = 3, timeSeconds = 25) {
   const num = parseInt(levelNumber, 10) || 1;
+  const nextLvl = Math.min(100, num + 1);
+
+  // Update local profile immediately for seamless offline progression
+  let currentProfile = getLocalProfile() || {
+    username: 'ArrowMaster',
+    current_level: num,
+    hearts: 3,
+    hints: 2,
+    completed_levels: [],
+    stars: 0
+  };
+
+  if (!currentProfile.completed_levels.includes(num)) {
+    currentProfile.completed_levels.push(num);
+    currentProfile.stars = (currentProfile.stars || 0) + (heartsLeft === 3 ? 3 : heartsLeft === 2 ? 2 : 1);
+  }
+  currentProfile.current_level = Math.max(currentProfile.current_level || 1, nextLvl);
+  saveLocalProfile(currentProfile);
+
   try {
     const res = await fetch(`${API_BASE}/levels/${num}/complete`, {
       method: 'POST',
@@ -908,12 +972,21 @@ export async function submitLevelWin(levelNumber, heartsLeft = 3, timeSeconds = 
       body: JSON.stringify({ heartsLeft, timeSeconds })
     });
     if (res.ok) {
-      return await res.json();
+      const json = await res.json();
+      if (json.success && json.data?.profile) {
+        saveLocalProfile(json.data.profile);
+        return json;
+      }
     }
   } catch (e) {
-    // Fallback
+    // Offline mode: proceed with local profile
   }
-  return { success: true, next_level: Math.min(100, num + 1) };
+
+  return {
+    success: true,
+    next_level: nextLvl,
+    data: { profile: currentProfile }
+  };
 }
 
 export async function fetchDailyChallenge() {
@@ -937,16 +1010,21 @@ export async function fetchDailyChallenge() {
 }
 
 export async function fetchUserProfile() {
+  const localProf = getLocalProfile();
   try {
     const res = await fetch(`${API_BASE}/user/profile`, { cache: 'no-store' });
     if (res.ok) {
       const json = await res.json();
-      if (json.success && json.data) return json.data;
+      if (json.success && json.data) {
+        saveLocalProfile(json.data);
+        return json.data;
+      }
     }
   } catch (e) {
-    // Fallback
+    // Offline mode: return locally persisted profile
   }
-  return {
+
+  return localProf || {
     username: 'ArrowMaster',
     current_level: 4,
     hearts: 3,
