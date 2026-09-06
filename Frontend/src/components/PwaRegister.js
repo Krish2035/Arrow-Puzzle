@@ -8,17 +8,27 @@ export default function PwaRegister() {
   const [isOffline, setIsOffline] = useState(false);
 
   useEffect(() => {
-    // 1. Register Service Worker
+    // 1. Register Service Worker with automatic update checks
     if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         navigator.serviceWorker
           .register('/sw.js')
           .then((reg) => {
             console.log('✅ Arrow Puzzle PWA Service Worker active:', reg.scope);
+            // Check for updates on every page load
+            reg.update();
           })
           .catch((err) => {
             console.warn('⚠️ Service Worker registration failed:', err);
           });
+      });
+
+      let refreshing = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!refreshing) {
+          refreshing = true;
+          window.location.reload();
+        }
       });
     }
 
