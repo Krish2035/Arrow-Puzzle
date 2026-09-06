@@ -273,7 +273,7 @@ export default function GameScreen({
         [arrow.id]: effDir
       }));
 
-      // Remove after snake finishes slithering out (800ms for smooth, satisfying motion)
+      // Remove after snake finishes slithering out (1200ms for relaxed, smooth motion)
       setTimeout(() => {
         setArrows(prev => {
           const next = prev.filter(a => a.id !== arrow.id);
@@ -293,7 +293,7 @@ export default function GameScreen({
           delete copy[arrow.id];
           return copy;
         });
-      }, 800);
+      }, 1200);
 
     } else {
       // Collision/Obstruction!
