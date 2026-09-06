@@ -254,13 +254,18 @@ export default function GameScreen({
     return dots;
   };
 
+  // Active arrows on board excluding any arrows currently slithering out
+  const activeArrows = useMemo(() => {
+    return arrows.filter(a => !exitingArrows[a.id]);
+  }, [arrows, exitingArrows]);
+
   // Handle player tapping on an arrow
   const handleArrowClick = (arrow) => {
     if (gameOver || exitingArrows[arrow.id]) return;
     setMovesCount(prev => prev + 1);
 
-    // Check collision with remaining arrows
-    const result = checkArrowObstruction(arrow, arrows);
+    // Check collision against ONLY currently active arrows on the board (ignoring ones already slithering out!)
+    const result = checkArrowObstruction(arrow, activeArrows);
 
     if (result.canExit) {
       sounds.playWhoosh();
@@ -314,8 +319,8 @@ export default function GameScreen({
 
   // Hint powerup
   const handleUseHint = () => {
-    if (hints <= 0 || arrows.length === 0 || gameOver) return;
-    const clearable = findClearableArrows(arrows);
+    if (hints <= 0 || activeArrows.length === 0 || gameOver) return;
+    const clearable = findClearableArrows(activeArrows);
     if (clearable.length > 0) {
       sounds.playHint();
       setHints(prev => prev - 1);
@@ -326,12 +331,12 @@ export default function GameScreen({
 
   // Precision tool powerup
   const handleUseTool = () => {
-    if (gameOver || arrows.length === 0) return;
+    if (gameOver || activeArrows.length === 0) return;
     sounds.playTap();
     if (hearts < maxHearts) {
       setHearts(prev => Math.min(maxHearts, prev + 1));
     } else {
-      const clearable = findClearableArrows(arrows);
+      const clearable = findClearableArrows(activeArrows);
       if (clearable.length > 0) {
         handleArrowClick(clearable[0]);
       }
@@ -369,7 +374,7 @@ export default function GameScreen({
   const levelNum = levelData?.level_number || 1;
   const isLevel1 = levelNum === 1;
 
-  const clearableCount = findClearableArrows(arrows).length;
+  const clearableCount = findClearableArrows(activeArrows).length;
 
   return (
     <div className="game-screen-wrapper">
@@ -547,12 +552,12 @@ export default function GameScreen({
                 <span style={{
                   fontSize: '11px',
                   fontWeight: 800,
-                  color: hardMode ? '#ffffff' : '#64748b',
+                  color: hardMode ? '#ffffff' : '#475569',
                   background: hardMode ? '#e11d48' : '#e2e8f0',
                   padding: '2px 8px',
                   borderRadius: '10px'
                 }}>
-                  {hardMode ? 'ON' : 'OFF'}
+                  {hardMode ? 'HARD' : 'STANDARD'}
                 </span>
               </button>
             )}
@@ -658,26 +663,31 @@ export default function GameScreen({
                   ? createExtendedPathD(arrow.points, arrow.direction, runway)
                   : createPathD(arrow.points, arrow.direction);
 
+                // Sized to ensure no overlap with adjacent parallel arrow tracks (separated by scale px)
+                const clickHitboxWidth = Math.min(scale * 0.82, Math.max(10, arrowStrokeWidth * 2.2));
+
                 return (
                   <g
                     key={arrow.id}
                     className={groupClass}
                     onClick={() => handleArrowClick(arrow)}
                     style={{
-                      cursor: 'pointer',
+                      cursor: isExiting ? 'default' : 'pointer',
+                      pointerEvents: isExiting ? 'none' : 'auto',
                       '--body-len': `${bodyLen}px`,
                       '--slither-dist': `${slitherDist}px`,
                       '--slither-dist-neg': `-${slitherDist}px`
                     }}
                   >
-                    {/* Wide invisible stroke for easy tapping/clicking */}
+                    {/* Precision invisible stroke for tapping/clicking that never overlaps neighboring arrows */}
                     <path
                       d={createPathD(arrow.points, arrow.direction)}
                       fill="none"
                       stroke="transparent"
-                      strokeWidth={Math.max(24, arrowStrokeWidth * 4.8)}
+                      strokeWidth={clickHitboxWidth}
                       strokeLinecap="round"
                       strokeLinejoin="round"
+                      style={{ pointerEvents: isExiting ? 'none' : 'stroke' }}
                     />
                     {/* Visual snake line path */}
                     <path
@@ -686,6 +696,7 @@ export default function GameScreen({
                       className={`arrow-path ${isExiting ? 'slithering-body' : ''}`}
                       style={{
                         strokeWidth: arrowStrokeWidth,
+                        pointerEvents: isExiting ? 'none' : 'stroke',
                         ...(isExiting ? {
                           strokeDasharray: `${bodyLen} ${slitherDist + 200}`,
                           strokeDashoffset: 0
@@ -693,7 +704,10 @@ export default function GameScreen({
                       }}
                     />
                     {/* Sharp Arrowhead (mouth of the snake leading the way) */}
-                    <g className={`arrowhead-wrapper ${isExiting ? `slithering-head-${isExiting}` : ''}`}>
+                    <g 
+                      className={`arrowhead-wrapper ${isExiting ? `slithering-head-${isExiting}` : ''}`}
+                      style={{ pointerEvents: isExiting ? 'none' : 'auto' }}
+                    >
                       {renderArrowhead(arrow)}
                     </g>
                   </g>
