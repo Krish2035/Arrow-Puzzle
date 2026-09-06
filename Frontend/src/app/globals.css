@@ -1189,7 +1189,7 @@ html, body {
 
 /* Snake-Like Slither Exit Animations */
 .arrow-path.slithering-body {
-  animation: snakeBodySlither 0.44s cubic-bezier(0.2, 0.7, 0.35, 1) forwards;
+  animation: snakeBodySlither 0.8s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
 }
 
 @keyframes snakeBodySlither {
@@ -1211,16 +1211,16 @@ html, body {
 }
 
 .arrowhead-wrapper.slithering-head-down {
-  animation: snakeHeadDown 0.44s cubic-bezier(0.2, 0.7, 0.35, 1) forwards;
+  animation: snakeHeadDown 0.8s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
 }
 .arrowhead-wrapper.slithering-head-up {
-  animation: snakeHeadUp 0.44s cubic-bezier(0.2, 0.7, 0.35, 1) forwards;
+  animation: snakeHeadUp 0.8s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
 }
 .arrowhead-wrapper.slithering-head-right {
-  animation: snakeHeadRight 0.44s cubic-bezier(0.2, 0.7, 0.35, 1) forwards;
+  animation: snakeHeadRight 0.8s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
 }
 .arrowhead-wrapper.slithering-head-left {
-  animation: snakeHeadLeft 0.44s cubic-bezier(0.2, 0.7, 0.35, 1) forwards;
+  animation: snakeHeadLeft 0.8s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
 }
 
 @keyframes snakeHeadDown {
