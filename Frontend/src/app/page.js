@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import HomeScreen from '../components/HomeScreen';
 import GameScreen from '../components/GameScreen';
 import LevelWinScreen from '../components/LevelWinScreen';
@@ -99,7 +99,7 @@ export default function Page() {
   };
 
   // Handle completing a level
-  const handleLevelComplete = (clearedLevelNumber, heartsLeft, timeSeconds) => {
+  const handleLevelComplete = useCallback((clearedLevelNumber, heartsLeft, timeSeconds) => {
     const num = parseInt(clearedLevelNumber, 10) || currentLevel;
     const nextLvl = Math.min(100, num + 1);
 
@@ -123,7 +123,7 @@ export default function Page() {
       .catch(err => {
         console.warn('Background sync:', err);
       });
-  };
+  }, [currentLevel, levelData]);
 
   // Handle Next Game action from win screen
   const handleNextGame = async (nextLevelNumber) => {

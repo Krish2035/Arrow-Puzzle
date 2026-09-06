@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   ChevronLeft, Settings, Heart, Send, Lightbulb, RotateCcw,
   Sparkles, Keyboard, ChevronRight
@@ -27,12 +27,14 @@ export default function GameScreen({
   const [exitingArrows, setExitingArrows] = useState({});
   const [gameOver, setGameOver] = useState(false);
   const [hasWon, setHasWon] = useState(false);
+  const hasWonRef = useRef(false);
   const [arrowsLoaded, setArrowsLoaded] = useState(false);
   const [startTime, setStartTime] = useState(Date.now());
 
   // Initialize arrows from level data
   useEffect(() => {
     if (levelData && levelData.arrows) {
+      hasWonRef.current = false;
       setArrows(levelData.arrows);
       setArrowsLoaded(true);
       setHearts(hardMode ? 2 : 3);
@@ -48,19 +50,17 @@ export default function GameScreen({
 
   // Guaranteed reactive victory trigger when board is cleared
   useEffect(() => {
-    if (!arrowsLoaded || !levelData || hasWon || gameOver) return;
+    if (!arrowsLoaded || !levelData || hasWonRef.current || gameOver) return;
     if (arrows.length === 0) {
+      hasWonRef.current = true;
       setHasWon(true);
       sounds.playWin();
       const timeTaken = Math.max(1, Math.round((Date.now() - startTime) / 1000));
-      const timer = setTimeout(() => {
-        if (typeof onLevelComplete === 'function') {
-          onLevelComplete(levelData.level_number || 1, hearts, timeTaken);
-        }
-      }, 350);
-      return () => clearTimeout(timer);
+      if (typeof onLevelComplete === 'function') {
+        onLevelComplete(levelData.level_number || 1, hearts, timeTaken);
+      }
     }
-  }, [arrows.length, arrowsLoaded, levelData, hasWon, gameOver, hearts, startTime, onLevelComplete]);
+  }, [arrows.length, arrowsLoaded, levelData, gameOver, hearts, startTime, onLevelComplete]);
 
   // Coordinate scaling: map grid coords to SVG viewbox (420x420)
   const svgSize = 420;
@@ -227,7 +227,19 @@ export default function GameScreen({
 
       // Remove after snake finishes slithering out (440ms)
       setTimeout(() => {
-        setArrows(prev => prev.filter(a => a.id !== arrow.id));
+        setArrows(prev => {
+          const next = prev.filter(a => a.id !== arrow.id);
+          if (next.length === 0 && !hasWonRef.current) {
+            hasWonRef.current = true;
+            setHasWon(true);
+            sounds.playWin();
+            const timeTaken = Math.max(1, Math.round((Date.now() - startTime) / 1000));
+            if (typeof onLevelComplete === 'function') {
+              onLevelComplete(levelData.level_number || 1, hearts, timeTaken);
+            }
+          }
+          return next;
+        });
         setExitingArrows(prev => {
           const copy = { ...prev };
           delete copy[arrow.id];
