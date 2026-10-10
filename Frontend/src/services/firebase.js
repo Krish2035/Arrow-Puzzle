@@ -12,12 +12,12 @@ import {
 
 // User's Firebase configuration
 export const firebaseConfig = {
-  apiKey: "AIzaSyAD-OErRckR1II0ZXlYC3ViloxPqPXQFUI",
-  authDomain: "arrow-puzzle-game-895f2.firebaseapp.com",
-  projectId: "arrow-puzzle-game-895f2",
-  storageBucket: "arrow-puzzle-game-895f2.firebasestorage.app",
-  messagingSenderId: "515036569951",
-  appId: "1:515036569951:web:179c7f427779f9723c96ea"
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "",
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "arrow-puzzle-game-895f2.firebaseapp.com",
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "arrow-puzzle-game-895f2",
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "arrow-puzzle-game-895f2.firebasestorage.app",
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "515036569951",
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "1:515036569951:web:179c7f427779f9723c96ea"
 };
 
 // Initialize Firebase safely (avoid re-initialization in Next.js SSR / Fast Refresh)
