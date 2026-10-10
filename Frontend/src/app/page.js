@@ -2,18 +2,20 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import HomeScreen from '../components/HomeScreen';
+import LoginScreen from '../components/LoginScreen';
 import GameScreen from '../components/GameScreen';
 import LevelWinScreen from '../components/LevelWinScreen';
 import DailyModal from '../components/DailyModal';
 import ProfileModal from '../components/ProfileModal';
 import SettingsModal from '../components/SettingsModal';
-import { fetchLevel, submitLevelWin, fetchDailyChallenge, fetchUserProfile } from '../services/api';
-
+import AuthModal from '../components/AuthModal';
 import DesktopNavbar from '../components/DesktopNavbar';
+import { fetchLevel, submitLevelWin, fetchDailyChallenge, fetchUserProfile, syncUserProfile } from '../services/api';
+import { subscribeToAuthChanges } from '../services/firebase';
 
 export default function Page() {
-  // Navigation states: 'home' | 'game' | 'win'
-  const [screen, setScreen] = useState('home');
+  // Navigation states: 'login' | 'home' | 'game' | 'win'
+  const [screen, setScreen] = useState('login');
   const [activeTab, setActiveTab] = useState('main');
 
   // Game data states
@@ -26,7 +28,13 @@ export default function Page() {
   const [dailyOpen, setDailyOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [authModalTab, setAuthModalTab] = useState('signin');
+  const [pendingLevel, setPendingLevel] = useState(null);
   const [hardMode, setHardMode] = useState(false);
+
+  // Determine if user is logged in
+  const isAuthenticated = Boolean(userProfile?.email || (userProfile?.uid && userProfile?.uid !== 'guest'));
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -45,11 +53,32 @@ export default function Page() {
     });
   };
 
+  // Listen to Firebase Auth state
+  useEffect(() => {
+    const unsubscribe = subscribeToAuthChanges(async (authUser) => {
+      if (authUser) {
+        const synced = await syncUserProfile({
+          uid: authUser.uid,
+          username: authUser.displayName,
+          email: authUser.email,
+          photoURL: authUser.photoURL,
+          provider: authUser.provider || 'firebase'
+        });
+        setUserProfile(prev => ({ ...prev, ...synced }));
+        // When authenticated user is detected, move from login to home
+        setScreen(prev => (prev === 'login' ? 'home' : prev));
+      }
+    });
+    return () => {
+      if (typeof unsubscribe === 'function') unsubscribe();
+    };
+  }, []);
+
   // Load initial profile and level data
   useEffect(() => {
     async function loadInitial() {
       let startLvl = 3;
-      let initialView = 'home';
+      let initialView = 'login';
 
       let hasExplicitLevel = false;
       if (typeof window !== 'undefined') {
@@ -76,13 +105,24 @@ export default function Page() {
       setLevelData(level);
       setLastClearedLevelData(level);
       setCurrentLevel(startLvl);
-      if (initialView !== 'home') setScreen(initialView);
+
+      // Only enter game if authenticated; otherwise first screen is login
+      const hasAuth = Boolean(profile?.email || (profile?.uid && profile?.uid !== 'guest'));
+      if (hasAuth) {
+        if (initialView !== 'home' && initialView !== 'login') {
+          setScreen(initialView);
+        } else {
+          setScreen('home');
+        }
+      } else {
+        setScreen('login');
+      }
     }
     loadInitial();
   }, []);
 
-  // Handle starting a game (from Home or Daily)
-  const handleStartGame = async (levelNumberOrType) => {
+  // Actual launch logic once authenticated
+  const startActualGame = async (levelNumberOrType) => {
     if (levelNumberOrType === 'daily') {
       const dailyData = await fetchDailyChallenge();
       setLevelData(dailyData);
@@ -95,6 +135,40 @@ export default function Page() {
       setLastClearedLevelData(data);
       setCurrentLevel(num);
       setScreen('game');
+    }
+  };
+
+  // Handle starting a game (Gated by Authentication)
+  const handleStartGame = async (levelNumberOrType) => {
+    if (!isAuthenticated) {
+      // Without login or signup, user will not be able to play the game!
+      setPendingLevel(levelNumberOrType);
+      setAuthModalTab('signin');
+      setAuthModalOpen(true);
+      return;
+    }
+    await startActualGame(levelNumberOrType);
+  };
+
+  // Triggered upon successful Sign In, Sign Up, or Google Sign-In
+  const handleAuthSuccess = async (authUser) => {
+    const synced = await syncUserProfile({
+      uid: authUser.uid,
+      username: authUser.displayName,
+      email: authUser.email,
+      photoURL: authUser.photoURL,
+      provider: authUser.provider || 'firebase'
+    });
+    setUserProfile(prev => ({ ...prev, ...synced }));
+    setAuthModalOpen(false);
+
+    // If user clicked to play a level, seamlessly launch it now; otherwise go to home
+    if (pendingLevel !== null) {
+      const targetLevel = pendingLevel;
+      setPendingLevel(null);
+      await startActualGame(targetLevel);
+    } else {
+      setScreen('home');
     }
   };
 
@@ -127,6 +201,12 @@ export default function Page() {
 
   // Handle Next Game action from win screen
   const handleNextGame = async (nextLevelNumber) => {
+    if (!isAuthenticated) {
+      setPendingLevel(nextLevelNumber);
+      setAuthModalTab('signin');
+      setAuthModalOpen(true);
+      return;
+    }
     const data = await fetchLevel(nextLevelNumber);
     setLevelData(data);
     setLastClearedLevelData(data);
@@ -142,24 +222,66 @@ export default function Page() {
     if (profile) setUserProfile(profile);
   };
 
+  // Handle Profile Update / Google Login Sync
+  const handleProfileUpdate = async (updatedData) => {
+    const synced = await syncUserProfile(updatedData);
+    setUserProfile(prev => ({ ...prev, ...synced }));
+  };
+
+  const openAuthModal = (tab = 'signin') => {
+    setAuthModalTab(tab);
+    setAuthModalOpen(true);
+  };
+
   return (
     <div className="app-shell">
-      <DesktopNavbar
-        currentLevel={levelData?.level_number || currentLevel}
-        onOpenDaily={() => setDailyOpen(true)}
-        onOpenProfile={() => setProfileOpen(true)}
-        onSelectLevel={handleStartGame}
-        onGoHome={handleGoHome}
-        activeScreen={screen}
-      />
+      {screen !== 'login' && (
+        <DesktopNavbar
+          currentLevel={levelData?.level_number || currentLevel}
+          onOpenDaily={() => {
+            if (!isAuthenticated) {
+              setPendingLevel('daily');
+              openAuthModal('signin');
+            } else {
+              setDailyOpen(true);
+            }
+          }}
+          onOpenProfile={() => setProfileOpen(true)}
+          onOpenAuth={openAuthModal}
+          onSelectLevel={handleStartGame}
+          onGoHome={handleGoHome}
+          activeScreen={screen}
+          profile={userProfile}
+        />
+      )}
 
       <main className="app-main-content">
+        {screen === 'login' && (
+          <LoginScreen
+            onAuthSuccess={handleAuthSuccess}
+            onContinueAsGuest={() => setScreen('home')}
+          />
+        )}
+
         {screen === 'home' && (
           <HomeScreen
             currentLevel={currentLevel}
             onStartGame={handleStartGame}
-            onOpenDaily={() => setDailyOpen(true)}
-            onOpenProfile={() => setProfileOpen(true)}
+            onOpenDaily={() => {
+              if (!isAuthenticated) {
+                setPendingLevel('daily');
+                openAuthModal('signin');
+              } else {
+                setDailyOpen(true);
+              }
+            }}
+            onOpenProfile={() => {
+              if (!isAuthenticated) {
+                openAuthModal('signin');
+              } else {
+                setProfileOpen(true);
+              }
+            }}
             activeTab={activeTab}
             setActiveTab={setActiveTab}
           />
@@ -187,6 +309,19 @@ export default function Page() {
         )}
       </main>
 
+      {/* Authentication Modal (Sign In / Sign Up & Continue with Google) */}
+      <AuthModal
+        isOpen={authModalOpen}
+        onClose={() => {
+          setAuthModalOpen(false);
+          setPendingLevel(null);
+        }}
+        onAuthSuccess={handleAuthSuccess}
+        initialTab={authModalTab}
+        title={authModalTab === 'signin' ? 'Sign In to Play' : 'Sign Up to Play'}
+        subtitle="Sign in or create an account to start playing Arrow Puzzle mazes and save your scores."
+      />
+
       {/* Popups & Modals */}
       <DailyModal
         isOpen={dailyOpen}
@@ -202,6 +337,9 @@ export default function Page() {
         onClose={() => setProfileOpen(false)}
         profile={userProfile}
         currentLevel={currentLevel}
+        onProfileUpdate={handleProfileUpdate}
+        onOpenAuth={openAuthModal}
+        onSignOut={() => setScreen('login')}
       />
 
       <SettingsModal

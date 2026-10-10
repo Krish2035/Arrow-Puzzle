@@ -1046,3 +1046,44 @@ export async function fetchUserProfile() {
     stars: 9
   };
 }
+
+export async function syncUserProfile(userData) {
+  let localProf = getLocalProfile() || {};
+  localProf = { ...localProf, ...userData };
+  saveLocalProfile(localProf);
+
+  try {
+    const res = await fetch(`${API_BASE}/user/sync`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(localProf)
+    });
+    if (res.ok) {
+      const json = await res.json();
+      if (json.success && json.data) {
+        saveLocalProfile(json.data);
+        return json.data;
+      }
+    }
+  } catch (e) {
+    // Offline mode
+  }
+  return localProf;
+}
+
+export async function searchLevels(query, difficulty) {
+  try {
+    const params = new URLSearchParams();
+    if (query) params.append('q', query);
+    if (difficulty) params.append('difficulty', difficulty);
+    const res = await fetch(`${API_BASE}/levels/search?${params.toString()}`);
+    if (res.ok) {
+      const json = await res.json();
+      if (json.success) return json.data;
+    }
+  } catch (e) {
+    console.warn('Search levels API call:', e);
+  }
+  return [];
+}
+

@@ -8,3 +8,13 @@ export const getUserProfile = async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 };
+
+export const syncUserProfile = async (req, res) => {
+  try {
+    const userData = req.body;
+    const profile = await gameStore.syncProfile(userData);
+    res.json({ success: true, data: profile });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};

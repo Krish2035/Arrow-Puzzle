@@ -1,0 +1,120 @@
+version: '3.8'
+
+services:
+  # Nginx Load Balancer
+  load-balancer:
+    image: nginx:alpine
+    container_name: arrow-puzzle-load-balancer
+    ports:
+      - "80:80"
+    volumes:
+      - ./Backend/nginx/load-balancer.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - backend-node-1
+      - backend-node-2
+      - backend-node-3
+    networks:
+      - arrow-net
+
+  # Horizontally Scaled Backend Instance 1
+  backend-node-1:
+    build:
+      context: ./Backend
+      dockerfile: Dockerfile
+    container_name: arrow-backend-1
+    environment:
+      - PORT=5000
+      - REDIS_URL=redis://redis-cache:6379
+      - DATABASE_URL=postgresql://postgres:postgres@primary-db:5432/arrow_puzzle
+      - READ_REPLICA_URL=postgresql://postgres:postgres@replica-db:5432/arrow_puzzle
+    depends_on:
+      - redis-cache
+      - primary-db
+    networks:
+      - arrow-net
+
+  # Horizontally Scaled Backend Instance 2
+  backend-node-2:
+    build:
+      context: ./Backend
+      dockerfile: Dockerfile
+    container_name: arrow-backend-2
+    environment:
+      - PORT=5000
+      - REDIS_URL=redis://redis-cache:6379
+      - DATABASE_URL=postgresql://postgres:postgres@primary-db:5432/arrow_puzzle
+      - READ_REPLICA_URL=postgresql://postgres:postgres@replica-db:5432/arrow_puzzle
+    depends_on:
+      - redis-cache
+      - primary-db
+    networks:
+      - arrow-net
+
+  # Horizontally Scaled Backend Instance 3
+  backend-node-3:
+    build:
+      context: ./Backend
+      dockerfile: Dockerfile
+    container_name: arrow-backend-3
+    environment:
+      - PORT=5000
+      - REDIS_URL=redis://redis-cache:6379
+      - DATABASE_URL=postgresql://postgres:postgres@primary-db:5432/arrow_puzzle
+      - READ_REPLICA_URL=postgresql://postgres:postgres@replica-db:5432/arrow_puzzle
+    depends_on:
+      - redis-cache
+      - primary-db
+    networks:
+      - arrow-net
+
+  # Redis Distributed Cache Service
+  redis-cache:
+    image: redis:7-alpine
+    container_name: arrow-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - arrow-net
+
+  # Primary Database (Writes)
+  primary-db:
+    image: postgres:15-alpine
+    container_name: arrow-postgres-primary
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: arrow_puzzle
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg-primary-data:/var/lib/postgresql/data
+      - ./Backend/src/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+    networks:
+      - arrow-net
+
+  # Read Replica Database (Reads)
+  replica-db:
+    image: postgres:15-alpine
+    container_name: arrow-postgres-replica
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: arrow_puzzle
+    ports:
+      - "5433:5432"
+    volumes:
+      - pg-replica-data:/var/lib/postgresql/data
+      - ./Backend/src/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+    networks:
+      - arrow-net
+
+networks:
+  arrow-net:
+    driver: bridge
+
+volumes:
+  redis-data:
+  pg-primary-data:
+  pg-replica-data:

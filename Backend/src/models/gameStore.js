@@ -1,4 +1,7 @@
-import { pool, getIsPgConnected } from '../config/db.js';
+import { pool, readQuery, writeQuery, getIsPgConnected } from '../config/db.js';
+import { cacheGet, cacheSet, cacheDel, cacheDelPattern } from '../config/redis.js';
+import { db as drizzleDb, readDb as drizzleReadDb, schema } from '../config/drizzle.js';
+import { eq, desc } from 'drizzle-orm';
 
 function mulberry32(a) {
   return function() {
@@ -887,24 +890,51 @@ let memoryProfile = {
 export const gameStore = {
   async getLevel(levelNumber) {
     const num = parseInt(levelNumber, 10) || 1;
+    const cacheKey = `level:${num}`;
+
+    // 1. Check Redis Cache
+    const cached = await cacheGet(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    let levelResult = null;
+
+    // 2. Check Read Replica / PostgreSQL via readQuery
     if (getIsPgConnected()) {
       try {
-        const res = await pool.query('SELECT * FROM levels WHERE level_number = $1', [num]);
+        const res = await readQuery('SELECT * FROM levels WHERE level_number = $1', [num]);
         if (res.rows.length > 0) {
           const row = res.rows[0];
           const parsed = typeof row.arrows === 'string' ? JSON.parse(row.arrows) : row.arrows;
           if (verifySolvability(parsed)) {
-            return { ...row, arrows: parsed };
+            levelResult = { ...row, arrows: parsed };
           }
         }
       } catch (err) {
-        console.error('Error fetching from PostgreSQL:', err.message);
+        console.error('Error fetching from Read Replica/PostgreSQL:', err.message);
       }
     }
-    return getOrGenerateLevel(num);
+
+    if (!levelResult) {
+      levelResult = getOrGenerateLevel(num);
+    }
+
+    // Cache level for 1 hour
+    if (levelResult) {
+      await cacheSet(cacheKey, levelResult, 3600);
+    }
+
+    return levelResult;
   },
 
   async getAllLevels() {
+    const cacheKey = 'levels:all';
+    const cached = await cacheGet(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
     const list = [];
     for (let i = 1; i <= 100; i++) {
       const lvl = getOrGenerateLevel(i);
@@ -916,20 +946,34 @@ export const gameStore = {
         arrow_count: lvl.arrows.length
       });
     }
+
+    // Cache list for 2 hours
+    await cacheSet(cacheKey, list, 7200);
     return list;
   },
 
   async getProfile() {
+    const cacheKey = 'user:profile:active';
+    const cached = await cacheGet(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
     if (getIsPgConnected()) {
       try {
-        const res = await pool.query('SELECT * FROM users LIMIT 1');
+        // Query read replica
+        const res = await readQuery('SELECT * FROM users ORDER BY id DESC LIMIT 1');
         if (res.rows.length > 0) {
-          return res.rows[0];
+          const prof = res.rows[0];
+          await cacheSet(cacheKey, prof, 180);
+          return prof;
         }
       } catch (err) {
-        console.error('Error fetching user from PostgreSQL:', err.message);
+        console.error('Error fetching user from Read Replica/PostgreSQL:', err.message);
       }
     }
+
+    await cacheSet(cacheKey, memoryProfile, 180);
     return memoryProfile;
   },
 
@@ -937,7 +981,7 @@ export const gameStore = {
     const num = parseInt(levelNumber, 10);
     if (!memoryProfile.completed_levels.includes(num)) {
       memoryProfile.completed_levels.push(num);
-      memoryProfile.stars += 3;
+      memoryProfile.stars += (heartsLeft === 3 ? 3 : heartsLeft === 2 ? 2 : 1);
     }
     if (memoryProfile.current_level <= num) {
       memoryProfile.current_level = Math.min(100, num + 1);
@@ -945,19 +989,24 @@ export const gameStore = {
 
     if (getIsPgConnected()) {
       try {
-        await pool.query(
+        // Write to Primary database
+        await writeQuery(
           `INSERT INTO level_completions (user_id, level_number, hearts_left, time_seconds)
            VALUES (1, $1, $2, $3)`,
           [num, heartsLeft, timeSeconds]
         );
-        await pool.query(
-          `UPDATE users SET current_level = GREATEST(current_level, $1 + 1) WHERE id = 1`,
-          [num]
+        await writeQuery(
+          `UPDATE users SET current_level = GREATEST(current_level, $1 + 1), stars = stars + $2 WHERE id = 1`,
+          [num, (heartsLeft === 3 ? 3 : heartsLeft === 2 ? 2 : 1)]
         );
       } catch (err) {
-        console.error('Error saving level completion in PostgreSQL:', err.message);
+        console.error('Error saving level completion in Primary DB:', err.message);
       }
     }
+
+    // Invalidate profile cache
+    await cacheDel('user:profile:active');
+    await cacheDelPattern('user:*');
 
     return {
       success: true,
@@ -966,8 +1015,62 @@ export const gameStore = {
     };
   },
 
+  async syncProfile(userData) {
+    if (!userData) return memoryProfile;
+
+    if (userData.username) memoryProfile.username = userData.username;
+    if (userData.email) memoryProfile.email = userData.email;
+    if (userData.photoURL) memoryProfile.photoURL = userData.photoURL;
+    if (userData.uid) memoryProfile.uid = userData.uid;
+    if (userData.current_level) memoryProfile.current_level = Math.max(memoryProfile.current_level, userData.current_level);
+    if (userData.stars) memoryProfile.stars = Math.max(memoryProfile.stars, userData.stars);
+    if (Array.isArray(userData.completed_levels)) {
+      const merged = new Set([...memoryProfile.completed_levels, ...userData.completed_levels]);
+      memoryProfile.completed_levels = Array.from(merged).sort((a, b) => a - b);
+    }
+
+    if (getIsPgConnected()) {
+      try {
+        // Upsert user in Primary DB using writeQuery / Drizzle
+        await writeQuery(
+          `INSERT INTO users (uid, username, email, photo_url, current_level, stars)
+           VALUES ($1, $2, $3, $4, $5, $6)
+           ON CONFLICT (id) DO UPDATE
+           SET username = EXCLUDED.username,
+               email = EXCLUDED.email,
+               photo_url = EXCLUDED.photo_url,
+               current_level = GREATEST(users.current_level, EXCLUDED.current_level),
+               stars = GREATEST(users.stars, EXCLUDED.stars)`,
+          [
+            memoryProfile.uid || 'guest',
+            memoryProfile.username,
+            memoryProfile.email || null,
+            memoryProfile.photoURL || null,
+            memoryProfile.current_level,
+            memoryProfile.stars
+          ]
+        );
+      } catch (err) {
+        console.warn('Sync profile to Postgres warning:', err.message);
+      }
+    }
+
+    // Invalidate profile cache
+    await cacheDel('user:profile:active');
+    await cacheDelPattern('user:*');
+
+    return memoryProfile;
+  },
+
   async getDailyChallenge() {
     const today = new Date().toISOString().split('T')[0];
+    const cacheKey = `daily:${today}`;
+
+    const cached = await cacheGet(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
     const monthNames = ["January", "February", "March", "April", "May", "June",
       "July", "August", "September", "October", "November", "December"
     ];
@@ -983,6 +1086,10 @@ export const gameStore = {
       date_iso: today
     };
 
+    // Cache daily challenge for 24h
+    await cacheSet(cacheKey, dailyLevel, 86400);
+
     return dailyLevel;
   }
 };
+
